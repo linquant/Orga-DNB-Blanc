@@ -7309,32 +7309,39 @@ handleFileSelect = function(type) {
  * @returns {Object|null} L'objet élève de DB.students si identifié à 100%, sinon null.
  */
 function findStudentSecure(rawNom, rawPrenom, rawClasse, rawAno) {
-    if (!rawNom) return null;
-    
-    const nomClean = rawNom.toString().toUpperCase().trim();
+    // Normalisation (insensible à la casse et aux espaces) de tous les champs
+    const nomClean = rawNom ? rawNom.toString().toUpperCase().trim() : "";
     const prenomClean = rawPrenom ? rawPrenom.toString().toUpperCase().trim() : "";
     const classeClean = rawClasse ? rawClasse.toString().toUpperCase().trim() : "";
     const anoClean = rawAno ? rawAno.toString().toUpperCase().trim() : "";
 
-    // 1. Filtrage primaire (Nom + Prénom)
+    // 1. Recherche prioritaire par numéro d'anonymat (identifiant unique)
+    if (anoClean) {
+        const byAno = DB.students.find(s => s.anonymat && s.anonymat.toString().toUpperCase().trim() === anoClean);
+        if (byAno) return byAno;
+    }
+
+    if (!nomClean) return null;
+
+    // 2. Filtrage primaire (Nom + Prénom)
     const matchingStudents = DB.students.filter(s => {
-        const matchNom = s.nom.toUpperCase().trim() === nomClean;
-        const matchPrenom = prenomClean ? (s.prenom.toUpperCase().trim() === prenomClean) : true;
+        const matchNom = s.nom && s.nom.toUpperCase().trim() === nomClean;
+        const matchPrenom = prenomClean ? (s.prenom && s.prenom.toUpperCase().trim() === prenomClean) : true;
         return matchNom && matchPrenom;
     });
 
-    // 2. Retour immédiat si match parfait et unique
+    // 3. Retour immédiat si match parfait et unique
     if (matchingStudents.length === 1) return matchingStudents[0];
-    
-    // 3. Gestion experte des homonymes (2+ résultats)
+
+    // 4. Gestion experte des homonymes (2+ résultats)
     if (matchingStudents.length > 1) {
         const disambiguated = matchingStudents.find(s => {
-            const matchAno = anoClean && s.anonymat ? s.anonymat.toUpperCase().trim() === anoClean : false;
+            const matchAno = anoClean && s.anonymat ? s.anonymat.toString().toUpperCase().trim() === anoClean : false;
             const matchClasse = classeClean && s.classe ? s.classe.toUpperCase().trim() === classeClean : false;
             return matchAno || matchClasse;
         });
         // On retourne l'élève s'il est départagé. Sinon on bloque (retourne null) pour éviter d'écraser des données.
-        return disambiguated || null; 
+        return disambiguated || null;
     }
 
     return null; // Aucun élève trouvé
@@ -11131,20 +11138,9 @@ function importMissingLabels() {
     }
 }
 
-function findStudentSecure(nom, prenom, classe, ano) {
-    nom = nom ? String(nom).toUpperCase().trim() : "";
-    prenom = prenom ? String(prenom).trim() : "";
-    ano = ano ? String(ano).trim() : "";
-    
-    // 1. Recherche prioritaire par numéro d'anonymat
-    if (ano) {
-        const s = DB.students.find(st => st.anonymat === ano);
-        if (s) return s;
-    }
-    
-    // 2. Sinon, recherche par nom et prénom
-    return DB.students.find(st => st.nom === nom && (!prenom || st.prenom === prenom)) || null;
-}
+// NOTE : findStudentSecure() est défini une seule fois, plus haut (recherche
+// insensible à la casse, priorité anonymat, départage des homonymes par
+// classe/anonymat). L'ancien doublon qui se trouvait ici a été supprimé.
 
 window.exportPochettesCorrecteursPDF = function(subj) {
     const lots = DB.corrections.lots[subj];
